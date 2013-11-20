@@ -25,7 +25,8 @@ def _getparam(name, section='main'):
 def init():
     """ Initialize JCD workspace with default setup"""
     if os.path.exists('.jcdworkspace'):
-        raise Exception, 'Workspace already exists'
+        raise Exception, 'A workspace already exists here'
+        
     cp = ConfigParser()
     cp.add_section('main')
     cp.set('main','source-folder','src')
@@ -35,6 +36,14 @@ def init():
     cp.set('main','cla','D6')
     cp.set('main','ins','77')
     cp.write(open('.jcdworkspace','w'))
+    return """Workspace initialized.
+You can now use "jcd gen" to instrument your code. The current source folder is supposed to be :
+%s
+If this is not right, use "jcd setup --source-folder=..." to fix it. 
+
+Do not worry, if something goes wrong with a command, use "jcd restore" to recover backuped copy of your code. 
+""" % os.path.join(_getwsroot(),'src')
+
 
 @cmd.subcmd
 def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=None,cla=None,ins=None):
@@ -45,15 +54,16 @@ def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=N
     def set(name,value):
         if value == None: return
         cfg.set('main',name,value)
+        print '%s updated' % name
         dirty['val']=True
         
     set('source-folder',source_folder)
-    set('backup-folder',backup_folder)
     set('debuginfo-path',debuginfo_path)
     set('log-size',log_size)
     set('cla',cla)
     set('ins',ins)
     if dirty['val']: cfg.write(open(os.path.join(_getwsroot(),'.jcdworkspace'),'w'))
+    print 'Current config :'
     cfg.write(sys.stdout)
 
 

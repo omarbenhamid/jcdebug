@@ -42,10 +42,9 @@ The returned buffer can be converted back to human readable textual log using *j
 # jcd Reference 
 ## jcd init :
  Create jcdebug workspace in current folder. jcd commands can be invoked from any subfolder of current folder to use this workspace setup.
-## jcd setup [--<variable>=<varval> ...]:
+## jcd setup [--<variable>=<value> ...]:
  Show / update current workspace setup variables. With no paramters this comment show current value of setup parameters. With <name>=<value> pairs, values of parameters are set.
  - *source-folder* absolute / relative path to where javacard source resides, defaults to 'src/'.
- - *backup-folder* absolute / relative path to where to save a copy of modified files defaults to 'old/'.
  - *debuginfo-path* absolute / retlatvie path to where debuginfo file shall reside, defaults to 'jcd.debuginfo'.
  - *log-size* number of bytes in log buffer, this can be computed this way : <desired line count>*3+<variable dump>
  - *cla* class byte in hex of APDU to invoke jcdebug runtime in applet. defaults ot D0.
@@ -59,3 +58,6 @@ Removes any JCD instrumentation from code. It is advised to do a clean before an
 
 ## jcd show [-o <outputpath>] [<binlogfile in hex>]
 Converts hex log as read from card to textual human readable log. If no path to binlog file is set, bin log is expected in std in. If no *-o* option is set output is sent to std out.
+
+## jcd restore
+Restore source folder from backup. Current source folder is backup in backup folder.
