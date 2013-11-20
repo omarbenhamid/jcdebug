@@ -9,10 +9,17 @@ some_command('nooptvalue1','nooptvalue2',long_arg='value1',s='othervalue')
 
 to do this this function should be registerd :
 
-@cmd.reg
-some_command(_arg1,_arg2,long_arg,s='defaultvalue', *args):
- "Command docuemntation"
+@cmd.subcmd
+def some_command(_arg1,_arg2,long_arg,s='defaultvalue', *args):
+    "Command docuemntation"
+    ...
  
+   
+....
+
+if __name__ == '__main__':
+    cmd.run()
+
 
 """
 import argparse
@@ -63,28 +70,36 @@ class Command:
         
     
     def invoke(self,args):
-        self.callable(**args)
+        try:
+            ret = self.callable(**args)
+            if ret != None: print ret
+        except Exception, msg:
+            print "** FAILED"
+            print msg
+            exit(1)
 
-
-
-def printall(**kwargs):
-    print kwargs
-
-def reg(f):
-    Command(f.__name__,f,help=f.__doc__,
-        args=list(arg.lstrip('_') for arg in inspect.getargspec(f).args if arg.startswith('_')),
-        opts=list(arg.lstrip('_') for arg in inspect.getargspec(f).args if not arg.startswith('_')) )
-    return f
-
-@reg
-def setup(_p1,_p2,truc,truac):
-    pass
-if __name__ == '__main__':
-    Command('hello',printall,help='Say hallow',args=['message',{'name':'label','help':'The display label of my stuff'}])
-    Command('bye',printall,help='Say bye',args=['message'], opts=['s','--k',{'name':'smook','help':'do some spoopic stuff'}])
+def run():
     args = parser.parse_args()
     par=dict(vars(args))
     del par['cmd']
     args.cmd.invoke(par)
+
+def subcmd(f):
+    """ use as a function or decorator to register this function asa subcommand """
+    Command(f.__name__,f,help=f.__doc__,
+        args=list(arg.lstrip('_').replace('_','-') for arg in inspect.getargspec(f).args if arg.startswith('_')),
+        opts=list(arg.replace('_','-') for arg in inspect.getargspec(f).args if not arg.startswith('_')) )
+    return f
+
+
+
+if __name__ == '__main__':
+    
+    def printall(**kwargs):
+        print kwargs
+
+    Command('hello',printall,help='Say hallow',args=['message',{'name':'label','help':'The display label of my stuff'}])
+    Command('bye',printall,help='Say bye',args=['message'], opts=['s','--k',{'name':'smook','help':'do some spoopic stuff'}])
+    cmd.run()
     
     
