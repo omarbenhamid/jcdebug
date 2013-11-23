@@ -76,10 +76,16 @@ class Command:
         except Exception, msg:
             print "** FAILED"
             print msg
-            exit(1)
-
+            if debug: raise
+            else: exit(1)
+debug=False
 def run():
-    args = parser.parse_args()
+    global debug
+    argv = sys.argv[1:]
+    if argv[0] == '-d': 
+        debug=True
+        argv = argv[1:]
+    args = parser.parse_args(argv)
     par=dict(vars(args))
     del par['cmd']
     args.cmd.invoke(par)

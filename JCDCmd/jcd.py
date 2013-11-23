@@ -1,6 +1,7 @@
 import cmd
-import os, sys
+import os, sys, tempfile, shutil, re, pickle
 from ConfigParser import ConfigParser
+from datetime import datetime
 
 def _getwsroot():
     curdir = os.path.abspath(os.getcwd())
@@ -18,10 +19,10 @@ def _getconfig():
     return _config
     
 def _getparam(name, section='main'):
-    return _getconfig().get(section,'name')
+    return _getconfig().get(section,name)
     
 
-@cmd.subcmd 
+@cmd.subcmd
 def init():
     """ Initialize JCD workspace with default setup"""
     if os.path.exists('.jcdworkspace'):
@@ -66,6 +67,156 @@ def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=N
     print 'Current config :'
     cfg.write(sys.stdout)
 
+def _recurseforjava(d):
+    for f in os.listdir(d):
+        prop = os.path.join(d,f)
+        if os.path.isdir(prop): _recurseforjava(prop)
+        if(prop.lower().endswith('.java')): yield prop
+    
+class Backup:
+    def __init__(self):
+        self.command = sys.argv[:]
+        self.time = datetime.now()
+        self.tmpdir = tempfile.mkdtemp('.jcd-bkp')
+        open(os.path.join(self.tmpdir,'bkp.info'),'w').close() 
+    
+    def rollback(self):
+        #recover previously backuped files
+        shutil.rmtree(self.tmpdir)
+    
+    def commit(self):
+        if os.path.exists('.jcd-bkp'):
+            shutil.rmtree('.jcd-bkp')
+        shutil.move(self.tmpdir, '.jcd-bkp')
+        pickle.dump({'command':self.command, 'time': self.time},open('.jcd-bkp/manifest','wb'))
+    
+    def stage(self,rpath):
+        """ Stage the given file and return path to temporary copy """
+        path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
+        tgt=os.path.join(self.tmpdir,rpath)
+        if os.path.exists(tgt): return #already staged
+        tgtd = os.path.dirname(tgt)
+        if not os.path.exists(tgtd): os.makedirs(tgtd)
+        shutil.copy(path,tgt)
+        return tgt
+        
+    def restore(self, rpath):
+        path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
+        tgt=os.path.join(self.tmpdir,rpath)
+        if not os.path.exists(tgt): raise Exception, 'Trying to recover not staged file'
+        if os.path.exists(path): os.remove(path)
+        if not os.path.exists(os.path.dirname(path)): os.makedirs(os.path.dirname(path))
+        shutil.copy(tgt,path)
+        
+    def unstage(self, rpath):
+        path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
+        tgt=os.path.join(self.tmpdir,rpath)
+        os.remove(tgt)
+        tgtd = os.path.dirname(tgt)
+        if len(os.listdir(tgtd)) == 0: os.removedirs(tgtd)
 
+def _writecode(out,sourcelines):
+    out.write('//@JCD-GEN-BEGIN{%d}\n'%sourcelines.count(';'))
+    out.write('//Code managed by JCD-GEN, do not modify. Use "jcd clean" to remvoe it\n')
+    out.write(sourcelines)
+    out.write('\n//@JCD-GEN-END\n');
+
+strtab=[]
+code=0;
+revhash={}
+def _registerstring(strval):
+    try:
+        return strtab.index(strval)
+    except:
+        strtab.append(strval)
+        return len(strtab)-1
+    
+
+class Macro:
+    def __init__(self, name, regex,template):
+        """ Tempalte syntax is 
+            %<n>% raw replace by value of group <n>
+            $<n>$ register value of group <n> to string table and insert the index in decimal
+            {<opt-name>} lookup config parameter <opt-name> and inline value here"""
+        self.re = re.compile(regex)
+        self.template=template
+        self.name = name
+        
+    def gencode(self, line):
+        m = self.re.match(line)
+        if m==None: return
+        ret = self.template
+        for g,v in enumerate(m.groups()):
+            ret = ret.replace('%'+ str(g+1) + '%',v)
+            if ('$'+ str(g+1) +'$') in ret:
+                code = _registerstring(v)
+                ret = ret.replace('$'+ str(g+1) + '$', str(code))
+        conf = _getconfig()
+        for opt in conf.options('main'):
+            ret = ret.replace('{%s}'%opt, conf.get('main',opt))
+        return ret
+
+macros = [
+    Macro('log_w_param','\\s*//!([^{]*)\\{([^}]*)\\}\\s*$','JCD.log((short)$1$,%2%);'),
+    Macro('log','\\s*//!(.*)$','JCD.log((short)$1$);'),
+    Macro('process','\\s*//--JCD-PROCESS{([^}]*)}\\s*$','if(JCD.processAPDU(%1%)) return;'),
+    Macro('install','\\s*//--JCD-INSTALL\\s*$','JCD.install((byte)0x{cla},(byte)0x{ins},(short){log-size},true);')
+    ]
+    
+def applymacros(line):
+    """ return a tuple : name, replacement code"""
+    for macro in macros:
+        code = macro.gencode(line)
+        if code != None: return macro.name, code
+    return None,None
+
+@cmd.subcmd
+def gen():
+    os.chdir(_getwsroot())
+    
+    backup = Backup()
+    try:
+        filesfound=False
+        processapduok=False
+        installok=False
+        for jfile in _recurseforjava(_getparam('source-folder')):
+            rpath = os.path.relpath(os.path.abspath(jfile),os.path.abspath(_getparam('source-folder')))
+            filesfound=True
+            staged=backup.stage(rpath)
+            inf = open(staged,'r')
+            out = open(jfile,'w')
+            
+            changed=False
+            for line in inf:
+                out.write(line)
+                macro, code = applymacros(line)
+                if macro != None: 
+                    _writecode(out,code)
+                    changed=True
+                if macro == 'process': processapduok=True
+                elif macro == 'install': installok=True
+                
+            out.close()
+            inf.close()
+            if not changed:
+                backup.restore(rpath)
+                backup.unstage(rpath)
+            
+                
+            
+        if not filesfound:
+            raise Exception, 'No source java file found in source folder %s \nHINT: use "jcd setup --source-folder <path>" to fix the path if it is wrong.' % _getparam('source-folder')
+        if not processapduok:
+            raise Exception, 'process apdu not instrumented, (did you forget to add "//--JCD-PROCESS{apdu}" as the first line of you processAPDU() function ?)'
+        if not installok:
+            raise Exception, 'install  not instrumented, (did you forget to add "//--JCD-INSTALL" as the first line of you install function ?)'
+        
+        backup.commit()
+    except:
+        backup.rollback()
+        raise
+    
+        
+        
 if __name__ == '__main__':
     cmd.run()

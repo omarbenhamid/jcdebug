@@ -25,9 +25,9 @@ When *jcd gen* command is run, jcdebug converts each *//!* comment into a log li
 # Working with jcd
 The command also integrates the jcdebug runtime stub to allow log file manipulation in applet.
 Notice that jcdebugs adds to you code new lines, these lines are surrownded by special comments starting with *//--JCDEBUG--* like:
-    //--JCDEBUG--START-: Do not touch code here.
+    //@JCD-GEN-BEGIN ...
     some code
-    //--JCDEBUG--END-
+    //@JCD-GEN-END
 Never delete manually these comments nore modify theire content. They are automatically managed by jcdebug. If you want to clean them use *jcd clean*
 
 # Dumping binlog
