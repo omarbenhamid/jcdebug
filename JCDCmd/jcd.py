@@ -235,7 +235,10 @@ def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without conf
     print "(If the goal is to clean JCD generated codes, you can use 'jcd clean' instead.)"
     if not f:
         print "Type enter to contiue or Ctrl-C to cancel (user -f to avoid this message) ..."
-        raw_input()
+        try:
+            raw_input()
+        except KeyboardInterrupt:
+            raise Exception, "Recovery canceled."
     
     for file in bkp.liststaged():
         nbkp.stage(file)
@@ -247,6 +250,7 @@ def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without conf
 
 @cmd.subcmd
 def clean():
+    """ Clean JCD generated code from source"""
     os.chdir(_getwsroot())
     bkp = Backup()
     try:
@@ -276,6 +280,7 @@ def clean():
                 bkp.restore(rpath)
                 bkp.unstage(rpath)
         bkp.commit()
+        return "Code cleaned from JCD generated code.\nYou can use 'jcd restore' if you need to recover the previous version."
     except:
         bkp.rollback()
         raise
