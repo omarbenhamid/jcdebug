@@ -77,7 +77,6 @@ public class JCD {
 			}
 	}
 	
-	static Rlog stackTrace;
 	static Rlog logTrace;
 	
 	private static byte CLA;
@@ -91,16 +90,9 @@ public class JCD {
 	 * @param logsize
 	 * @param persist
 	 */
-	public static void install(byte CLA, byte INS, short stacktraceDepth, short logsize, boolean persist) {
+	public static void install(byte CLA, byte INS, short logsize, boolean persist) {
 		JCD.CLA = CLA;
 		JCD.INS = INS;
-		if(stacktraceDepth != 0) 
-			stackTrace = new Rlog((short)(stacktraceDepth*2), persist) {
-				void dropOne() {
-					//Skip two bytes
-					sidx=(short)((sidx+2)% buffer.length);
-				};
-			};
 		if(logsize != 0) logTrace = new Rlog(logsize, persist){
 			void dropOne() {
 				//Skip a full tlv
@@ -119,14 +111,11 @@ public class JCD {
 	  */
 	 public static boolean processAPDU(APDU apdu) {
 	  byte[] apduBuffer = apdu.getBuffer();
-	  Rlog dumped = null;
 	  if(apduBuffer[ISO7816.OFFSET_CLA] != CLA || apduBuffer[ISO7816.OFFSET_INS] != INS) return false;
-	  if(apduBuffer[ISO7816.OFFSET_P1] == 00) dumped = logTrace;
-	  else if (apduBuffer[ISO7816.OFFSET_P1] == 1) dumped = stackTrace;
 	  apdu.setOutgoing();
-	  short len = dumped.available();
+	  short len = logTrace.available();
 	  apdu.setOutgoingLength(len);
-	  dumped.dump(apdu.getBuffer(), (short)0, len);
+	  logTrace.dump(apdu.getBuffer(), (short)0, len);
 	  apdu.sendBytes((short)0,len);
 	  return true;
 	}
@@ -178,17 +167,4 @@ public class JCD {
 	public static void log(short tag, byte[] buffer) {
 		log(tag, buffer, (short)0, (short)buffer.length);
 	}
-	
-	public static void enterMethod(short methodId) {
-		if(stackTrace == null) return;
-		stackTrace.push((byte)((methodId >> 8) & (0xFF)));
-		stackTrace.push((byte)((methodId) & (0xFF)));
-	}
-	
-	public static void exitMethod() {
-		if(stackTrace == null) return;
-		stackTrace.pop();
-		stackTrace.pop();
-	}
-
 }
