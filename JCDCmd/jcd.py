@@ -244,6 +244,40 @@ def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without conf
     nbkp.commit()
     
     return "Files restored. You can recover your previous version running 'jcd restore' again"
-        
+
+@cmd.subcmd
+def clean():
+    os.chdir(_getwsroot())
+    bkp = Backup()
+    try:
+        for jfile in _recurseforjava(_getparam('source-folder')):
+            rpath = os.path.relpath(os.path.abspath(jfile),os.path.abspath(_getparam('source-folder')))
+            staged=bkp.stage(rpath)
+            inf = open(staged,'r')
+            out = open(jfile,'w')
+            changed=False
+            BEGIN_RE = re.compile('\\s*//@JCD-GEN-BEGIN\\{([0-9]*)\\}\\s*$')
+            END_RE = re.compile('\\s*//@JCD-GEN-END\\s*$')
+            num=0
+            for line in inf:
+                num+=1
+                m = BEGIN_RE.match(line)
+                if m == None: 
+                    out.write(line)
+                    continue
+                changed=True
+                colcount=int(m.group(1))
+                for gline in inf: #skip unti end comment
+                    num+=1
+                    colcount=colcount-gline.count(';')
+                    if END_RE.match(gline) != None: break
+                if colcount != 0: raise Exception, "%s : %d : JCD generated code seems to have been modified" % (rpath,num)
+            if not changed:
+                bkp.restore(rpath)
+                bkp.unstage(rpath)
+        bkp.commit()
+    except:
+        bkp.rollback()
+        raise
 if __name__ == '__main__':
     cmd.run()
