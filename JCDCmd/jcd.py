@@ -74,26 +74,28 @@ def _recurseforjava(d):
         if(prop.lower().endswith('.java')): yield prop
     
 class Backup:
-    def __init__(self):
+    def __init__(self, dir = None):
         self.command = sys.argv[:]
         self.time = datetime.now()
-        self.tmpdir = tempfile.mkdtemp('.jcd-bkp')
-        open(os.path.join(self.tmpdir,'bkp.info'),'w').close() 
+        if dir==None:
+            self.bkpdir = tempfile.mkdtemp('.jcd-bkp')
+            open(os.path.join(self.bkpdir,'bkp.info'),'w').close() 
+        else: self.bkpdir=dir
     
     def rollback(self):
         #recover previously backuped files
-        shutil.rmtree(self.tmpdir)
+        shutil.rmtree(self.bkpdir)
     
     def commit(self):
         if os.path.exists('.jcd-bkp'):
             shutil.rmtree('.jcd-bkp')
-        shutil.move(self.tmpdir, '.jcd-bkp')
+        shutil.move(self.bkpdir, '.jcd-bkp')
         pickle.dump({'command':self.command, 'time': self.time},open('.jcd-bkp/manifest','wb'))
     
     def stage(self,rpath):
         """ Stage the given file and return path to temporary copy """
         path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
-        tgt=os.path.join(self.tmpdir,rpath)
+        tgt=os.path.join(self.bkpdir,rpath)
         if os.path.exists(tgt): return #already staged
         tgtd = os.path.dirname(tgt)
         if not os.path.exists(tgtd): os.makedirs(tgtd)
@@ -102,7 +104,7 @@ class Backup:
         
     def restore(self, rpath):
         path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
-        tgt=os.path.join(self.tmpdir,rpath)
+        tgt=os.path.join(self.bkpdir,rpath)
         if not os.path.exists(tgt): raise Exception, 'Trying to recover not staged file'
         if os.path.exists(path): os.remove(path)
         if not os.path.exists(os.path.dirname(path)): os.makedirs(os.path.dirname(path))
@@ -110,10 +112,13 @@ class Backup:
         
     def unstage(self, rpath):
         path = os.path.abspath(os.path.join(_getparam('source-folder'), rpath))
-        tgt=os.path.join(self.tmpdir,rpath)
+        tgt=os.path.join(self.bkpdir,rpath)
         os.remove(tgt)
         tgtd = os.path.dirname(tgt)
         if len(os.listdir(tgtd)) == 0: os.removedirs(tgtd)
+        
+    def liststaged(self):
+        for file in _recurseforjava(self.bkpdir): yield os.path.relpath(file,self.bkpdir)
 
 def _writecode(out,sourcelines):
     out.write('//@JCD-GEN-BEGIN{%d}\n'%sourcelines.count(';'))
@@ -216,7 +221,29 @@ def gen():
         backup.rollback()
         raise
     
-        
+@cmd.subcmd
+def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without confirmation")):
+    os.chdir(_getwsroot())
+    if not os.path.exists('.jcd-bkp'): raise Exception, 'No current backup'
+    info=pickle.load(open('.jcd-bkp/manifest','rb'))
+    print "Restoring the follwoing backup:\n Date: %s\n Command: %s\n" % (info['time'],' '.join(info['command']))
+    print "The following files will be restored"
+    bkp = Backup(".jcd-bkp")
+    nbkp = Backup()
+    for file in bkp.liststaged() :
+        print " %s" % file
+    print "(If the goal is to clean JCD generated codes, you can use 'jcd clean' instead.)"
+    if not f:
+        print "Type enter to contiue or Ctrl-C to cancel (user -f to avoid this message) ..."
+        raw_input()
+    
+    for file in bkp.liststaged():
+        nbkp.stage(file)
+        bkp.restore(file)
+    
+    nbkp.commit()
+    
+    return "Files restored. You can recover your previous version running 'jcd restore' again"
         
 if __name__ == '__main__':
     cmd.run()
