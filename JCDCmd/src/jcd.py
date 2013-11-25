@@ -201,6 +201,10 @@ def gen():
             
             changed=False
             for line in inf:
+                skiped = _skipgenerated(line,inf)
+                if skiped != 0:
+                    changed = True
+                    continue
                 out.write(line)
                 macro, code = applymacros(line)
                 if macro != None: 
@@ -256,7 +260,20 @@ def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without conf
     nbkp.commit()
     
     return "Files restored. You can recover your previous version running 'jcd restore' again"
+BEGIN_RE = re.compile('\\s*//@JCD-GEN-BEGIN\\{([0-9]*)\\}\\s*$')
+END_RE = re.compile('\\s*//@JCD-GEN-END\\s*$')
 
+def _skipgenerated(line, inf):
+    m = BEGIN_RE.match(line)
+    if m == None: return 0
+    num=1
+    colcount=int(m.group(1))
+    for gline in inf: #skip unti end comment
+        num+=1
+        colcount=colcount-gline.count(';')
+        if END_RE.match(gline) != None: break
+    if colcount != 0: raise Exception, "JCD generated code seems to have been altered"
+    return num
 @cmd.subcmd
 def clean():
     """ Clean JCD generated code from source"""
@@ -269,22 +286,17 @@ def clean():
             inf = open(staged,'r')
             out = open(jfile,'w')
             changed=False
-            BEGIN_RE = re.compile('\\s*//@JCD-GEN-BEGIN\\{([0-9]*)\\}\\s*$')
-            END_RE = re.compile('\\s*//@JCD-GEN-END\\s*$')
+            
             num=0
             for line in inf:
                 num+=1
-                m = BEGIN_RE.match(line)
-                if m == None: 
-                    out.write(line)
-                    continue
-                changed=True
-                colcount=int(m.group(1))
-                for gline in inf: #skip unti end comment
-                    num+=1
-                    colcount=colcount-gline.count(';')
-                    if END_RE.match(gline) != None: break
-                if colcount != 0: raise Exception, "%s : %d : JCD generated code seems to have been modified" % (rpath,num)
+                try: skiped = _skipgenerated(line,inf)
+                except Exception, msg:
+                    raise Exception, "%s : %d : %s" % (rpath,num,msg)
+                if skiped == 0: out.write(line)
+                else: 
+                    changed=True
+                    num += skiped - 1
             if not changed:
                 bkp.restore(rpath)
                 bkp.unstage(rpath)
