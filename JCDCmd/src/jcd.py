@@ -127,14 +127,20 @@ def _writecode(out,sourcelines):
     out.write('\n//@JCD-GEN-END\n');
 
 strtab=[]
-code=0;
-revhash={}
 def _registerstring(strval):
     try:
         return strtab.index(strval)
     except:
         strtab.append(strval)
         return len(strtab)-1
+    
+def _savedebuginfo():
+    di = os.path.join(_getwsroot(),_getparam('debuginfo-path'))
+    didir = os.path.dirname(di)
+    if not os.path.exists(didir): os.makedirs(didir)
+    out = open(di,'w')
+    pickle.dump(strtab, out)
+    out.close()
     
 
 class Macro:
@@ -216,6 +222,7 @@ def gen():
         if not installok:
             raise Exception, 'install  not instrumented, (did you forget to add "//--JCD-INSTALL" as the first line of you install function ?)'
         
+        _savedebuginfo()
         backup.commit()
     except:
         backup.rollback()
