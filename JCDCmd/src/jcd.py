@@ -70,8 +70,10 @@ def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=N
 def _recurseforjava(d):
     for f in os.listdir(d):
         prop = os.path.join(d,f)
-        if os.path.isdir(prop): _recurseforjava(prop)
-        if(prop.lower().endswith('.java')): yield prop
+        if os.path.isdir(prop): 
+            for i in _recurseforjava(prop): yield i
+        if(prop.lower().endswith('.java')): 
+            yield prop
     
 class Backup:
     def __init__(self, dir = None):
