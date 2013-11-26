@@ -196,6 +196,7 @@ def applymacros(line):
 
 @cmd.subcmd
 def gen():
+    """ Instrument code in source-folder with JCD """
     os.chdir(_getwsroot())
     
     backup = Backup()
@@ -249,6 +250,7 @@ def gen():
     
 @cmd.subcmd
 def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without confirmation")):
+    """ Restore source-folder modified files from automatic backup """
     os.chdir(_getwsroot())
     if not os.path.exists('.jcd-bkp'): raise Exception, 'No current backup'
     info=pickle.load(open('.jcd-bkp/manifest','rb'))
@@ -334,6 +336,7 @@ def _nextchars(inf,sz):
 
 @cmd.subcmd
 def show(d=cmd.ArgSpec(help="Path to debug info file, by default, path from setup is used.")):
+    """ Interpret binary log (data of dump instruction) """
     if d == None: d = os.path.join(_getwsroot(),_getparam('debuginfo-path'))
     _loaddebuginfo(d)
     inf = sys.stdin
