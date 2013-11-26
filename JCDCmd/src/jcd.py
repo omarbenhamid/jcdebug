@@ -135,7 +135,11 @@ def _registerstring(strval):
     except:
         strtab.append(strval)
         return len(strtab)-1
-    
+
+def _getstring(idx):
+    if idx >= len(strtab): raise Exception, "Unrecognized log tag %04X, (are you using the right debuginfo file ?)" % idx
+    return strtab[idx]
+
 def _savedebuginfo():
     di = os.path.join(_getwsroot(),_getparam('debuginfo-path'))
     didir = os.path.dirname(di)
@@ -143,6 +147,13 @@ def _savedebuginfo():
     out = open(di,'w')
     pickle.dump(strtab, out)
     out.close()
+    
+def _loaddebuginfo(di):
+    global strtab
+    if not os.path.exists(di): raise Exception, "No such debuginfo file %s, use -d flag to point to the right debug info file." % di
+    inf=open(di,'rb')
+    strtab = pickle.load(inf)
+    inf.close()
     
 
 class Macro:
@@ -230,6 +241,8 @@ def gen():
         
         _savedebuginfo()
         backup.commit()
+        print "Code has been instrumented successfully, if something goes wrong, you can use 'jcd restore' to restore last version of you files."
+        print "\nDebuginfo file has been generated here :\n%s\nit is mandatory to use it for 'jcd show'"%os.path.join(_getwsroot(),_getparam('debuginfo-path'))
     except:
         backup.rollback()
         raise
@@ -305,5 +318,32 @@ def clean():
     except:
         bkp.rollback()
         raise
+
+def _nextchar(inf):
+    ret = ''
+    while ret.strip() == '':
+        ret = inf.read(1)
+        if ret == '': raise Exception, "End of file"
+    return ret
+
+def _nextchars(inf,sz):
+    ret = ''
+    for i in range(0,sz):
+        ret += _nextchar(inf)
+    return ret
+
+@cmd.subcmd
+def show(d=cmd.ArgSpec(help="Path to debug info file, by default, path from setup is used.")):
+    if d == None: d = os.path.join(_getwsroot(),_getparam('debuginfo-path'))
+    _loaddebuginfo(d)
+    inf = sys.stdin
+    #read byte by byte:
+    while True:
+        tag = int(_nextchars(inf,4),16)
+        print _getstring(tag)
+        datalen = int(_nextchars(inf,2),16)
+        if datalen != 0: print "DATA:%s" % _nextchars(inf,datalen*2)  
+    #each 4 hexa bytes read interpret the string, read the length byte and dump it.
+
 if __name__ == '__main__':
     cmd.run()

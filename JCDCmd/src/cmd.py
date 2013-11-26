@@ -137,6 +137,6 @@ if __name__ == '__main__':
 
     Command('hello',printall,help='Say hallow',args=['message',{'name':'label','help':'The display label of my stuff'}])
     Command('bye',printall,help='Say bye',args=['message'], opts=['s','--k',{'name':'smook','help':'do some spoopic stuff'}])
-    cmd.run()
+    run()
     
     
