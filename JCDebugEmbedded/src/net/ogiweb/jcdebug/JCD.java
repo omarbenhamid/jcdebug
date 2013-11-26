@@ -3,7 +3,6 @@ package net.ogiweb.jcdebug;
 import javacard.framework.APDU;
 import javacard.framework.ISO7816;
 import javacard.framework.JCSystem;
-import javacard.framework.Util;
 
 /**
  * .install() must be called to activate loggin (usually at applet install).
@@ -36,7 +35,7 @@ public class JCD {
 			
 			void push(byte data) {
 					buffer[eidx]=data;
-					eidx=(short)((eidx+1) % buffer.length);
+					eidx=(short)((short)(eidx+1) % buffer.length);
 					if(eidx==sidx) 
 						dropOne();
 			}
@@ -47,12 +46,12 @@ public class JCD {
 			 * @return
 			 */
 			void dropOne() {
-				sidx=(short)((sidx+1)% buffer.length);
+				sidx=(short)((short)(sidx+1)% buffer.length);
 			}
 			
 			byte pop() {
 				if(eidx==sidx)  return 0; //Should have checked available
-				eidx=(short)((eidx-1)%buffer.length);
+				eidx=(short)((short)(eidx-1)%buffer.length);
 				byte ret = buffer[eidx];
 				return ret;
 			}
@@ -69,8 +68,8 @@ public class JCD {
 			
 			short dump(byte[] out, short offset, short length) {
 				short wcount = (short)0;
-				for(short i = sidx; i != eidx && (wcount < length); i=(short)((i+1)%buffer.length)) {
-					out[offset+wcount] = buffer[i];
+				for(short i = sidx; i != eidx && (wcount < length); i=(short)((short)(i+1)%buffer.length)) {
+					out[(short)(offset+wcount)] = buffer[i];
 					wcount++;
 				}
 				return wcount;
@@ -97,9 +96,9 @@ public class JCD {
 			void dropOne() {
 				//Skip a full tlv
 				//Skipt tag
-				short nidx =(short)((sidx+2)% buffer.length);
+				short nidx =(short)((short)(sidx+2)% buffer.length);
 				byte len = buffer[nidx];
-				sidx = (short)((nidx+1+(short)(len&0x00FF))% buffer.length);
+				sidx = (short)((short)(nidx+1+(short)(len&0x00FF))% buffer.length);
 			}
 		};
 	}
@@ -153,15 +152,15 @@ public class JCD {
 		if(logTrace == null) return;
 		logTrace.push((byte)((tag >> 8) & (0xFF)));
 		logTrace.push((byte)((tag) & (0xFF)));
-		if((offset + len) > buffer.length)
+		if((short)(offset + len) >(short) buffer.length)
 			len = (short)(buffer.length - offset);
 		if(len > 0x00FF) len = 0x00FF; //Max length
-		if((len + 3)> logTrace.getSize()) { //TLV too big for logTrace buffer : shorten
+		if((short)(len + 3)>(short) logTrace.getSize()) { //TLV too big for logTrace buffer : shorten
 			len = (short)(logTrace.getSize() - 3);
 		}
 		logTrace.push((byte)(len & 0xFF));
-		for(int i=0 ; i<len; i++)
-			logTrace.push(buffer[offset+i]);
+		for(short i=0 ; i<len; i++)
+			logTrace.push(buffer[(short)(offset+i)]);
 	}
 	
 	public static void log(short tag, byte[] buffer) {
