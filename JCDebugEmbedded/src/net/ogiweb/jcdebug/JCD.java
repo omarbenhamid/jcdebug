@@ -110,7 +110,10 @@ public class JCD {
 	  */
 	 public static boolean processAPDU(APDU apdu) {
 	  byte[] apduBuffer = apdu.getBuffer();
-	  if(apduBuffer[ISO7816.OFFSET_CLA] != CLA || apduBuffer[ISO7816.OFFSET_INS] != INS) return false;
+	  if(apduBuffer[ISO7816.OFFSET_CLA] != CLA || apduBuffer[ISO7816.OFFSET_INS] != INS) {
+		  log((short)0, apduBuffer, (short)0, (short)5);
+		  return false;
+	  }
 	  apdu.setOutgoing();
 	  short len = logTrace.available();
 	  apdu.setOutgoingLength(len);

@@ -1,5 +1,5 @@
 import cmd
-import os, sys, tempfile, shutil, re, pickle
+import os, sys, tempfile, shutil, re, json
 from ConfigParser import ConfigParser
 from datetime import datetime
 
@@ -92,7 +92,9 @@ class Backup:
         if os.path.exists('.jcd-bkp'):
             shutil.rmtree('.jcd-bkp')
         shutil.move(self.bkpdir, '.jcd-bkp')
-        pickle.dump({'command':self.command, 'time': self.time},open('.jcd-bkp/manifest','wb'))
+        out=open('.jcd-bkp/manifest','wb')
+        json.dump({'command':' '.join(self.command), 'time': str(self.time)},out)
+        out.close()
     
     def stage(self,rpath):
         """ Stage the given file and return path to temporary copy """
@@ -128,7 +130,7 @@ def _writecode(out,sourcelines):
     out.write(sourcelines)
     out.write('\n//@JCD-GEN-END\n');
 
-strtab=[]
+strtab=['APDU RECEIVED']
 def _registerstring(strval):
     try:
         return strtab.index(strval)
@@ -145,14 +147,14 @@ def _savedebuginfo():
     didir = os.path.dirname(di)
     if not os.path.exists(didir): os.makedirs(didir)
     out = open(di,'w')
-    pickle.dump(strtab, out)
+    json.dump(strtab, out)
     out.close()
     
 def _loaddebuginfo(di):
     global strtab
     if not os.path.exists(di): raise Exception, "No such debuginfo file %s, use -d flag to point to the right debug info file." % di
     inf=open(di,'rb')
-    strtab = pickle.load(inf)
+    strtab = json.load(inf)
     inf.close()
     
 
@@ -253,8 +255,10 @@ def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without conf
     """ Restore source-folder modified files from automatic backup """
     os.chdir(_getwsroot())
     if not os.path.exists('.jcd-bkp'): raise Exception, 'No current backup'
-    info=pickle.load(open('.jcd-bkp/manifest','rb'))
-    print "Restoring the follwoing backup:\n Date: %s\n Command: %s\n" % (info['time'],' '.join(info['command']))
+    inf=open('.jcd-bkp/manifest','rb')
+    info=json.load(inf)
+    inf.close()
+    print "Restoring the follwoing backup:\n Date: %s\n Command: %s\n" % (info['time'],info['command'])
     print "The following files will be restored"
     bkp = Backup(".jcd-bkp")
     nbkp = Backup()
@@ -312,6 +316,8 @@ def clean():
                 else: 
                     changed=True
                     num += skiped - 1
+            inf.close()
+            out.close()
             if not changed:
                 bkp.restore(rpath)
                 bkp.unstage(rpath)
