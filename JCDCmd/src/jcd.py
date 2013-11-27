@@ -31,11 +31,11 @@ def init():
     cp = ConfigParser()
     cp.add_section('main')
     cp.set('main','source-folder','src')
-    cp.set('main','backup-folder','old')
     cp.set('main','debuginfo-path','jcd.debuginfo')
-    cp.set('main','log-size','0')
-    cp.set('main','cla','D6')
-    cp.set('main','ins','77')
+    cp.set('main','persist-log','true')
+    cp.set('main','log-size','200')
+    cp.set('main','cla','D0')
+    cp.set('main','ins','66')
     cp.write(open('.jcdworkspace','w'))
     return """Workspace initialized.
 You can now use "jcd gen" to instrument your code. The current source folder is supposed to be :
@@ -47,7 +47,7 @@ Do not worry, if something goes wrong with a command, use "jcd restore" to recov
 
 
 @cmd.subcmd
-def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=None,cla=None,ins=None):
+def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=None,cla=None,ins=None, persist_log=cmd.ArgSpec(choices=['yes','no','true','false'],help="When set to no, log buffer is transient and cleard on reset. This can be useful as transient buffer is not cleared in case of transactional rollback.")):
     """ Show / modify configuration of jcdebug """
     cfg = _getconfig()
     dirty = {'val':False}
@@ -61,6 +61,11 @@ def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=N
     set('source-folder',source_folder)
     set('debuginfo-path',debuginfo_path)
     set('log-size',log_size)
+    
+    if persist_log == 'yes': persist_log = 'true'
+    if persist_log == 'no': persist_log = 'false'
+    
+    set('persist-log',persist_log)
     set('cla',cla)
     set('ins',ins)
     if dirty['val']: cfg.write(open(os.path.join(_getwsroot(),'.jcdworkspace'),'w'))
@@ -186,7 +191,7 @@ macros = [
     Macro('log_w_param','\\s*//!([^{]*)\\{([^}]*)\\}\\s*$','JCD.log((short)$1$,%2%);'),
     Macro('log','\\s*//!(.*)$','JCD.log((short)$1$);'),
     Macro('process','\\s*//--JCD-PROCESS{([^}]*)}\\s*$','if(JCD.processAPDU(%1%)) return;'),
-    Macro('install','\\s*//--JCD-INSTALL\\s*$','JCD.install((byte)0x{cla},(byte)0x{ins},(short){log-size},true);')
+    Macro('install','\\s*//--JCD-INSTALL\\s*$','JCD.install((byte)0x{cla},(byte)0x{ins},(short){log-size},{persist-log});')
     ]
     
 def applymacros(line):
