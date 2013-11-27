@@ -79,7 +79,7 @@ class Command:
         except Exception, msg:
             print "** FAILED"
             print msg
-            exit(1)
+            sys.exit(1)
 
 class ArgSpec:
     """ 

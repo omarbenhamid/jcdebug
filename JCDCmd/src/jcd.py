@@ -327,18 +327,25 @@ def clean():
         bkp.rollback()
         raise
 
-def _nextchar(inf):
-    ret = ''
-    while ret.strip() == '':
+def _nexthex(inf):
+    ret = 'z'
+    while ret not in '0123456789ABCDEFabcdef':
         ret = inf.read(1)
         if ret == '': raise Exception, "End of file"
     return ret
 
-def _nextchars(inf,sz):
+def _nexthexs(inf,sz):
     ret = ''
     for i in range(0,sz):
-        ret += _nextchar(inf)
+        ret += _nexthex(inf)
     return ret
+
+def _formathex(hexstr):
+    if (len(hexstr) % 2 != 0): return hexstr
+    ret=''
+    for i in range(0,len(hexstr),2):
+        ret = ret + hexstr[i:i+2] + ' '
+    return ret.rstrip()
 
 @cmd.subcmd
 def show(d=cmd.ArgSpec(help="Path to debug info file, by default, path from setup is used.")):
@@ -348,10 +355,9 @@ def show(d=cmd.ArgSpec(help="Path to debug info file, by default, path from setu
     inf = sys.stdin
     #read byte by byte:
     while True:
-        tag = int(_nextchars(inf,4),16)
-        print _getstring(tag)
-        datalen = int(_nextchars(inf,2),16)
-        if datalen != 0: print "DATA:%s" % _nextchars(inf,datalen*2)  
+        tag = int(_nexthexs(inf,4),16)
+        datalen = int(_nexthexs(inf,2),16)
+        print "%04x: %s {%s}" % (tag,_getstring(tag), _formathex(_nexthexs(inf,datalen*2)) if datalen != 0 else 'no data')
     #each 4 hexa bytes read interpret the string, read the length byte and dump it.
 
 if __name__ == '__main__':
