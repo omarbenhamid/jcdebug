@@ -38,11 +38,9 @@ def init():
     cp.set('main','ins','66')
     cp.write(open('.jcdworkspace','w'))
     return """Workspace initialized.
-You can now use "jcd gen" to instrument your code. The current source folder is supposed to be :
+You can use 'jcd gen' now to enable Java Card Logging and Debugging on your applet. The current source folder is supposed to be :
 %s
-If this is not right, use "jcd setup --source-folder=..." to fix it. 
-
-Do not worry, if something goes wrong with a command, use "jcd restore" to recover backuped copy of your code. 
+If this is not right, use "jcd setup --source-folder=..." to set it somewhere else. 
 """ % os.path.join(_getwsroot(),'src')
 
 
@@ -71,6 +69,7 @@ def setup(source_folder=None, backup_folder=None, debuginfo_path=None,log_size=N
     if dirty['val']: cfg.write(open(os.path.join(_getwsroot(),'.jcdworkspace'),'w'))
     print 'Current config :'
     cfg.write(sys.stdout)
+    print "You can use 'jcd gen' now to enable/refresh Java Card Logging and Debugging on your applet."
 
 def _recurseforjava(d):
     for f in os.listdir(d):
@@ -135,12 +134,14 @@ def _writecode(out,sourcelines):
     out.write(sourcelines)
     out.write('\n//@JCD-GEN-END\n');
 
-strtab=['APDU RECEIVED']
+strtab=['APDU RECEIVED','EXCEPTION RAISED','STOP POINT HIT']
+builtinstrcount=len(strtab)
+
 def _registerstring(strval):
     try:
-        return strtab.index(strval)
+        return strtab.index(strval.strip())
     except:
-        strtab.append(strval)
+        strtab.append(strval.strip())
         return len(strtab)-1
 
 def _getstring(idx):
@@ -173,14 +174,14 @@ class Macro:
         self.template=template
         self.name = name
         
-    def gencode(self, line):
+    def gencode(self, line, srcfile, srcline):
         m = self.re.match(line)
         if m==None: return
         ret = self.template
         for g,v in enumerate(m.groups()):
             ret = ret.replace('%'+ str(g+1) + '%',v)
             if ('$'+ str(g+1) +'$') in ret:
-                code = _registerstring(v)
+                code = _registerstring('%s (%s:%d)' % (v, srcfile, srcline) )
                 ret = ret.replace('$'+ str(g+1) + '$', str(code))
         conf = _getconfig()
         for opt in conf.options('main'):
@@ -190,14 +191,16 @@ class Macro:
 macros = [
     Macro('log_w_param','\\s*//!([^{]*)\\{([^}]*)\\}\\s*$','JCD.log((short)$1$,%2%);'),
     Macro('log','\\s*//!(.*)$','JCD.log((short)$1$);'),
-    Macro('process','\\s*//--JCD-PROCESS{([^}]*)}\\s*$','if(JCD.processAPDU(%1%)) return;'),
+    Macro('process-begin','\\s*//--JCD-PROCESS-BEGIN{([^}]*)}\\s*$','if(JCD.processAPDU(%1%)) return;\ntry {'),
+    Macro('process-catch','\\s*//--JCD-CATCH{([^}]*)}\\s*$','}catch(%1% jcdException){ JCD.processException(jcdException); JCD.log($1$);'),
+    Macro('process-end','\\s*//--JCD-PROCESS-END\\s*$','}catch(JCD.JCDStopException jcdException){return;}\ncatch(Throwable jcdException){JCD.processException(jcdException);}'),
     Macro('install','\\s*//--JCD-INSTALL\\s*$','JCD.install((byte)0x{cla},(byte)0x{ins},(short){log-size},{persist-log});')
     ]
     
-def applymacros(line):
+def applymacros(line, srcfile, srcline):
     """ return a tuple : name, replacement code"""
     for macro in macros:
-        code = macro.gencode(line)
+        code = macro.gencode(line, srcfile, srcline)
         if code != None: return macro.name, code
     return None,None
 
@@ -210,6 +213,7 @@ def gen():
     try:
         filesfound=False
         processapduok=False
+        processapduendok=False
         installok=False
         for jfile in _recurseforjava(_getparam('source-folder')):
             rpath = os.path.relpath(os.path.abspath(jfile),os.path.abspath(_getparam('source-folder')))
@@ -219,17 +223,20 @@ def gen():
             out = open(jfile,'w')
             
             changed=False
+            linenum = 0
             for line in inf:
                 skiped = _skipgenerated(line,inf)
                 if skiped != 0:
                     changed = True
                     continue
+                linenum += 1
                 out.write(line)
-                macro, code = applymacros(line)
+                macro, code = applymacros(line, rpath, linenum)
                 if macro != None: 
                     _writecode(out,code)
                     changed=True
-                if macro == 'process': processapduok=True
+                if macro == 'process-begin': processapduok=True
+                elif macro == 'process-end': processapduendok=True
                 elif macro == 'install': installok=True
                 
             out.close()
@@ -243,17 +250,38 @@ def gen():
         if not filesfound:
             raise Exception, 'No source java file found in source folder %s \nHINT: use "jcd setup --source-folder <path>" to fix the path if it is wrong.' % _getparam('source-folder')
         if not processapduok:
-            raise Exception, 'process apdu not instrumented, (did you forget to add "//--JCD-PROCESS{apdu}" as the first line of you processAPDU() function ?)'
+            raise Exception, 'You need to add "//--JCD-PROCESS-BEGIN{apdu}" as the first line of your processAPDU() function.'
+        if not processapduendok:
+            raise Exception, 'You need to add "//--JCD-PROCESS-END" as the last line of your processAPDU() function.'
         if not installok:
-            raise Exception, 'install  not instrumented, (did you forget to add "//--JCD-INSTALL" as the first line of you install function ?)'
+            raise Exception, 'You need to add "//--JCD-INSTALL" as the first line of you install function.'
         
         _savedebuginfo()
         backup.commit()
-        print "Code has been instrumented successfully, if something goes wrong, you can use 'jcd restore' to restore last version of you files."
-        print "\nDebuginfo file has been generated here :\n%s\nit is mandatory to use it for 'jcd show'"%os.path.join(_getwsroot(),_getparam('debuginfo-path'))
     except:
         backup.rollback()
-        raise
+        raise    
+    print "Java Card Logging and Debugging successfully enabled on your applet."
+    print """
+You can now use the following APDUs with your applet :
+  - %(cla)s %(ins)s 01 00 00 : to enable APDU logging. This will log all received APDUs. (disabled by default)
+  - %(cla)s %(ins)s 02 00 00 : to disable APDU logging.
+  - %(cla)s %(ins)s 03 00 00 : Enable Exception Swallow. When an exception is thrown, the memory transaction is rolled back and even the JCDebug logs are rolled back. 
+                This APDU enables "swallowing" of all exceptions by JCDebug to avoid this. 
+                NOTICE: that this also keeps the state of memory in an uncertain state when an error occurs.
+  - %(cla)s %(ins)s 04 00 00 : Disable exception swallowing.
+  - %(cla)s %(ins)s 05 XX 00 : Set stop point where XX is the stop point id. When this point of code is reached the program returns. 
+                The following stop points are available : 
+                      %(stopPoints)s
+  - %(cla)s %(ins)s 05 00 00 : Disable stop point.
+  - %(cla)s %(ins)s 00 00 00 : to dump the log. The returned hexacimal buffer should be interpreted using 'jcd show' command.
+
+You can customize the class / instruction of these APDUs using 'jcd setup --cla=... --ins=...'.
+You can disable Javacard Logging and Debugging with 'jcd clean'
+""" % {'cla':_getparam('cla'), 'ins':_getparam('ins'),
+       'stopPoints': '\n                      '.join('%02x : %s' % (i+builtinstrcount, v) for i,v in enumerate(strtab[builtinstrcount:]))
+    }
+    
     
 @cmd.subcmd
 def restore(f=cmd.ArgSpec(action="store_true",help="Force restoring without confirmation")):

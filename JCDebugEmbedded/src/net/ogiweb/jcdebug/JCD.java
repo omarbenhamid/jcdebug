@@ -16,6 +16,7 @@ import javacard.framework.JCSystem;
  *
  */
 public class JCD {
+	public static class JCDStopException extends RuntimeException {}
 	/**
 	 * Rotating log class
 	 */
@@ -81,6 +82,12 @@ public class JCD {
 	private static byte CLA;
 	private static byte INS;
 	
+	private static boolean swallowExceptions = false;
+	private static boolean logAPDUs = false;
+	
+	private static short stopPoint = (short) 0;
+	
+	public static final short FIRSTUSERTAG = (short) 3;
 	/**
 	 * MUST Be called once to enable debug
 	 * @param CLA
@@ -103,6 +110,10 @@ public class JCD {
 		};
 	}
 	
+	public static boolean processException(Throwable t) throws Throwable {
+		if(this.swallowExceptions) return;
+		else throw t;
+	}
 	 /** must add this line to applet :
 	  * if(Debug.processAPDU(apdu)) return;
 	  * @param apdu
@@ -111,15 +122,35 @@ public class JCD {
 	 public static boolean processAPDU(APDU apdu) {
 	  byte[] apduBuffer = apdu.getBuffer();
 	  if(apduBuffer[ISO7816.OFFSET_CLA] != CLA || apduBuffer[ISO7816.OFFSET_INS] != INS) {
-		  log((short)0, apduBuffer, (short)0, (short)5);
+		  if(logAPDUs) log((short)0, apduBuffer, (short)0, (short)5);
 		  return false;
 	  }
-	  apdu.setOutgoing();
-	  short len = logTrace.available();
-	  apdu.setOutgoingLength(len);
-	  logTrace.dump(apdu.getBuffer(), (short)0, len);
-	  apdu.sendBytes((short)0,len);
-	  return true;
+	  switch(apduBuffer[ISO7816.OFFSET_P1]) {
+	  case 0:  //DUMP Log
+		  apdu.setOutgoing();
+		  short len = logTrace.available();
+		  apdu.setOutgoingLength(len);
+		  logTrace.dump(apdu.getBuffer(), (short)0, len);
+		  apdu.sendBytes((short)0,len);
+		  return true;
+	  case 1: //APDU Log enable
+		  logAPDUs = true;
+		  return true;
+	  case 2: //APDU Log disable
+		  logAPDUs = false;
+		  return true;
+	  case 3: //Swallow exceptions enable
+	      swallowExceptions = true;
+		  return true;
+	  case 4: //Swallow exceptions disable
+		  swallowExceptions = false;
+		  return true;
+	  case 5: //Set StopPoint
+		  stopPoint = (short) ( apduBuffer[ISO7816.OFFSET_P2] & 0xFF );
+		  return true;
+	  default:
+	      return true;
+	  }
 	}
 	
 	public static void log(short tag) {
@@ -164,6 +195,11 @@ public class JCD {
 		logTrace.push((byte)(len & 0xFF));
 		for(short i=0 ; i<len; i++)
 			logTrace.push(buffer[(short)(offset+i)]);
+		
+		if(tag >= FIRSTUSERTAG && tag == stopPoint) {
+			log((short)2,tag);
+			throw new JCDStopException();
+		}
 	}
 	
 	public static void log(short tag, byte[] buffer) {
