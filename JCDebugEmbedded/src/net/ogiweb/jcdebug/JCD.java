@@ -1,7 +1,8 @@
-package net.ogiweb.jcdebug;
+//TODO: Add package
 
 import javacard.framework.APDU;
 import javacard.framework.ISO7816;
+import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
 
 /**
@@ -110,8 +111,13 @@ public class JCD {
 		};
 	}
 	
-	public static boolean processException(Throwable t) throws Throwable {
-		if(this.swallowExceptions) return;
+	public static void processException(RuntimeException t) throws RuntimeException {
+		if(swallowExceptions) return;
+		else throw t;
+	}
+	
+	public static void processISOException(ISOException t) throws ISOException {
+		if(swallowExceptions) return;
 		else throw t;
 	}
 	 /** must add this line to applet :

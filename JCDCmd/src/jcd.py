@@ -193,7 +193,7 @@ macros = [
     Macro('log','\\s*//!(.*)$','JCD.log((short)$1$);'),
     Macro('process-begin','\\s*//--JCD-PROCESS-BEGIN{([^}]*)}\\s*$','if(JCD.processAPDU(%1%)) return;\ntry {'),
     Macro('process-catch','\\s*//--JCD-CATCH{([^}]*)}\\s*$','}catch(%1% jcdException){ JCD.processException(jcdException); JCD.log($1$);'),
-    Macro('process-end','\\s*//--JCD-PROCESS-END\\s*$','}catch(JCD.JCDStopException jcdException){return;}\ncatch(Throwable jcdException){JCD.processException(jcdException);}'),
+    Macro('process-end','\\s*//--JCD-PROCESS-END\\s*$','}catch(JCD.JCDStopException jcdException){return;}catch(javacard.framework.ISOException jcdException){JCD.processISOException(jcdException);}\ncatch(RuntimeException jcdException){JCD.processException(jcdException);}'),
     Macro('install','\\s*//--JCD-INSTALL\\s*$','JCD.install((byte)0x{cla},(byte)0x{ins},(short){log-size},{persist-log});')
     ]
     
